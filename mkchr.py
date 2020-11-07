@@ -3,8 +3,6 @@ import sys
 
 # TODO: Handle loops.
 # TODO: clean the code [comments, vars, funcs..]
-# BUG: the last line in the last block in a 'rel if' chunk that is before another if statement isn't connected to the next line
-
 def main(code_file, export_file):
     # open the file
     with open(code_file, "r") as f:
@@ -42,7 +40,7 @@ def get_graph(index, branch, code, graph, if_tracker):
             if "}" not in code[next_index]:
                 graph.append([neighbouring_node, next_index])
 
-        ## connect the true branch of an if statement to the last if block 
+        ## connect the true branch of all rel if statements to the line after last rel if block 
         if index < len(code)-1: # not the last line
 
             # add the last line in the statement to the tracker 
@@ -60,7 +58,6 @@ def get_graph(index, branch, code, graph, if_tracker):
                 # connect lines 
                 for block in if_tracker:
                     graph.append([block[1], index+1])
-
         ## return the current line to set the parent method's local index
         return index
 
@@ -84,12 +81,16 @@ def get_graph(index, branch, code, graph, if_tracker):
         # if
         if "if" in current_line and not "else" in current_line:
             
-            # connect the related if's blocks to the graph [the head 'if' to whatever is the prev line]
+            # link the related if's blocks to the graph [the head 'if' to whatever is the prev normal line]
             if len(graph) > 2:
                 # NOTE: since the delimiter is "{" instead of the keyword itself, 
                 # the "if" line is alone in the graph as well as its previous line
                 # so the line before "if" is graph[-2]
-                graph[-2].append(index-1)
+                # NOTE: you must make sure that the previous line ins't a '}' delimiter
+                # if it was, then the linkage would've been already done in the 'rel if' stuff 
+                prev_line = graph[-1][0]-1
+                if "}" not in code[prev_line]:
+                    graph[-2].append(index-1)
         
             # clear the tracker
             if_tracker = []
