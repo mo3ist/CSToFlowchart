@@ -53,7 +53,23 @@ def get_graph(index, branch, code, graph, if_tracker):
                     next_index = l
                     break
 
+
+            # NOTE: things will be different for the last block in the rel if statements
+            # you see, if we were in a loop then the next line would be the head of the loop
+            # NOT any line after.
+            in_loop = False
+            if index+1 < len(code):
+                # if last line in rel ifs
+                if not ("else" in code[index+1]):
+                    if len(branch) > 1:
+                        if "while" in code[branch[-2]-1]:
+                            in_loop = True
+            # count for being in a loop 
+            if in_loop:
+                next_index = branch[-2]-1
+
             if next_index:
+                print(f"linking {neighbouring_branch}, {next_index}")
                 graph.append([neighbouring_branch, next_index])
             else:
                 graph.append([neighbouring_branch, len(code)])
@@ -93,12 +109,24 @@ def get_graph(index, branch, code, graph, if_tracker):
                             popped = if_tracker.pop()
 
                             # get the next available line
-                            l = None
+                            # it will be either after the current or before it [if it was in a loop]
                             
-                            for i, line in enumerate(code[index+1: ]):
-                                if "}" not in line:
-                                    l = i+index+1
-                                    break
+                            # check for a loop
+                            in_loop = False
+                            if len(branch) > 1:
+                                if "while" in code[branch[-2]-1]:
+                                    in_loop = True
+                            
+                            l = None
+                            if not in_loop:
+                                
+                                for i, line in enumerate(code[index+1: ]):
+                                    if "}" not in line:
+                                        l = i+index+1
+                                        break
+                            else:
+                                # the line would be the head of the loop
+                                l = branch[-2]-1 
 
                             # check if the line isn't a non-clear-line
                             if popped[1]:
@@ -115,26 +143,27 @@ def get_graph(index, branch, code, graph, if_tracker):
             if "}" not in code[index-1]:
                 graph.append([index-1, branch[-1]-1]) 
             else:
-                ### SHIT:
-                # i need to loop in reverse to find a usable line then remove 
-                # it from the graph and link it to the head of the loop :)
+                # ### SHIT:
+                # # i need to loop in reverse to find a usable line then remove 
+                # # it from the graph and link it to the head of the loop :)
 
-                # find the clear line
-                line = None
-                for i in range(index-1, branch[-1], -1):
-                    if "}" not in code[i]:
-                        line = i
-                        break
+                # # find the clear line
+                # line = None
+                # for i in range(index-1, branch[-1], -1):
+                #     if "}" not in code[i]:
+                #         line = i
+                #         break
                 
-                # pop it from graph with whatever it was linked to
-                for p in range(len(graph)-1, 0, -1):
-                    if graph[p][0] == line:
-                        graph.pop()
+                # # pop it from graph with whatever it was linked to
+                # for p in range(len(graph)-1, 0, -1):
+                #     if graph[p][0] == line:
+                #         graph.pop()
                         
 
-                # link it to the loop's head
-                graph.append([line, branch[-1]-1])
-                
+                # # link it to the loop's head
+                # graph.append([line, branch[-1]-1])
+                pass
+
             # false direction
             # search for next line
             next_line = None
