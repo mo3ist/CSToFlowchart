@@ -3,11 +3,18 @@ import sys
 
 # TODO: clean the code [comments, vars, funcs..]
 # TODO: add delimiters for ture/false dirs
+    # DONE => ture
 # TODO: handle comments in-between rel ifs [& everywhere else rly]
 # TODO: IMPORTANT improve delimiters that could be used anywhere else
+    # DONE => '{' and '}'
 # TODO: style
+    # DONE
 # TODO: escape string fed to graphviz
+    # DONE
 # TODO: support a whole working file
+# TODO: line string processing 
+# TODO: for loop support
+    # DONE!
 
 def main(code_file, export_file):
     # open the file
@@ -16,21 +23,95 @@ def main(code_file, export_file):
 
     # get the graph
     graph = []
+    code = for_to_while(code)
     get_graph(0, [], code, graph, [])
+    visualize(graph, code, export_file)
+
+def for_to_while(code):
+    def convert(line):
+        ## for (int i=0; i<10; i++)
+        # get whats inside the parentheses
+        inside = line.split("(")[1].split(")")[0]
+        declaration, cond, delta = inside.split(";")
+        return declaration, cond, delta 
+
+
+    ## THE FAST (BUT BAD) FIX TO DO CONVERT NESTED FOR'S IS BY REPEATING UNTIL THERE'S NO FOR
+        
+    # get how many for's are in the code
+    times = 0
+    for l in code:
+        if "for" in l:
+            times += 1
+    
+    new_code = []
+    for time in range(times):
+        # reset stuff
+        new_code = []
+        stack = []
+        got_for = False
+
+        # search for a for and if you find it, find the last line in its block then do stuff
+        for i, l in enumerate(code):
+            if "for" in l and not got_for: 
+                got_for = True
+                declaration, cond, delta = convert(l)
+
+                spaces = len(l) - len(l.strip())            
+                while_line = " "*(spaces-1)+f"while ({cond})\n"
+
+                spaces = len(l) - len(l.strip())
+                new_code.append(" "*(spaces-1) + declaration+";\n")
+                new_code.append(while_line)
+                continue
+            
+            if got_for and "{" == l.strip():
+                stack.append("{")
+            
+            elif got_for and "}" == l.strip():
+                stack.pop()
+                if not stack:
+                    spaces = len(l) - len(l.strip())
+                    new_code.append(" "*(spaces-1) + delta+";\n")
+                    got_for = False
+
+            new_code.append(l)
+        
+        # update code
+        code = new_code
+    return new_code if new_code else code
+
+def visualize(graph, code, export_file):
+    """
+    Visualizes a given graph
+    """
     # visualize the graph
-    dot = Digraph()
+    dot = Digraph("G")
     dot.attr(fontsize="5")
+
+    # init the nodes and style them
+    for i, l in enumerate(code):
+        line = str(i+1) + "# " + l.strip()
+        if not (l.strip() == "}" or l.strip() == "{"):
+            if ("if" in l.split() or "else" in l.split()):
+                dot.attr("node", shape="diamond", color="red")
+            elif "while" in l.split():
+                dot.attr("node", shape="diamond", color="green")
+            else:
+                dot.attr("node", shape="box", color="black")
+            dot.node(line.replace("\\", "\\\\"))
+
     for node_pair in graph:
         if len(node_pair) > 1:
             label = f""
-            # if True in node_pair:
-            #     label = "True"
+            if "True" in node_pair:
+                label = "True"
             if node_pair[1] >= len(code):
                 last = "END"
             else:
-                last = str(node_pair[1]+1)+ "# " +code[node_pair[1]].strip()
+                last = str(node_pair[1]+1)+ "# " +code[node_pair[1]].strip().replace("\\", "\\\\")
             
-            first = str(node_pair[0]+1)+ "# " +code[node_pair[0]].strip()
+            first = str(node_pair[0]+1)+ "# " +code[node_pair[0]].strip().replace("\\", "\\\\")
             
             # the formatting of first and last has to be identical because last in one pair
             # is likely to be first in another
@@ -51,10 +132,14 @@ def get_graph(index, branch, code, graph, if_tracker):
             # if clear line 
             if popped[1] != None:
                 graph.append([popped[1], len(code)])
+        
+        # when the last line is clear, connect it to end
+        if "}" != code[index-1].strip():
+            graph.append([index-1, len(code)])
         return index
 
     # terminate recursion instance with a return value
-    if "}" in code[index]:
+    if "}" == code[index].strip():
         # check if we're branching from an if  
         if if_tracker and branch[-1]-1 == if_tracker[-1][0]:
             ## link the rel ifs
@@ -78,26 +163,33 @@ def get_graph(index, branch, code, graph, if_tracker):
             next_index = None       # meaning there's no clear one, aka end
             if not in_loop:
                 for l in range(index, len(code)):
-                    if "}" not in code[l]:
+                    if "}" != code[l].strip():
                         next_index = l
                         break
             else:
                 # connect to the head or the next clear line
                 if index+1 < len(code):
                     # clear line
-                    if "}" not in code[index+1]:
+                    if "}" != code[index+1].strip():
                         next_index = index+1
                     # non clear line
                     else:
                         next_index = branch[-2]-1 
 
-            if next_index:
-                graph.append([neighbouring_branch, next_index])
-            # no clear line but in loop
-            elif not next_index and in_loop:
-                graph.append([neighbouring_branch, branch[-2]-1])
-            else:
-                graph.append([neighbouring_branch, len(code)])
+            #### else doesn't have a false dir ####
+            is_else = False
+            if "else" in code[neighbouring_branch] and not "if" in code[neighbouring_branch]:
+                is_else = True
+
+            # add the false branch if not else
+            if not is_else:
+                if next_index:
+                    graph.append([neighbouring_branch, next_index])
+                # no clear line but in loop
+                elif not next_index and in_loop:
+                    graph.append([neighbouring_branch, branch[-2]-1])
+                else:
+                    graph.append([neighbouring_branch, len(code)])
 
             ## add the last line in the block to the if_tracker
             
@@ -108,7 +200,7 @@ def get_graph(index, branch, code, graph, if_tracker):
             #    }   => this can't be last line
             # }  
                 
-            if "}" not in code[index-1]:
+            if "}" != code[index-1].strip():
                 if_tracker[-1].append(index-1)
             else :
                 # no clear last line to the rel ifs
@@ -147,14 +239,14 @@ def get_graph(index, branch, code, graph, if_tracker):
                             if not in_loop:
                                 
                                 for i, line in enumerate(code[index+1: ]):
-                                    if "}" not in line:
+                                    if "}" != line.strip():
                                         l = i+index+1
                                         break
                             else:
                                 # the line would be the head of the loop
                                 # IF THERE'S NO CLEAR NEXT LINE!
                                 
-                                if "}" not in code[index+1]:
+                                if "}" != code[index+1].strip():
                                     # clear line
                                     l = index + 1
                                 else:
@@ -173,7 +265,7 @@ def get_graph(index, branch, code, graph, if_tracker):
         elif "while" in code[branch[-1]-1]:
             ## true direcion
             # find a clear last line
-            if "}" not in code[index-1]:
+            if "}" != code[index-1].strip():
                 graph.append([index-1, branch[-1]-1]) 
             else:
                 pass
@@ -182,7 +274,7 @@ def get_graph(index, branch, code, graph, if_tracker):
             # search for next line
             next_line = None
             for l in range(index+1, len(code)):
-                if "}" not in code[l]:
+                if "}" != code[l].strip():
                     next_line = l
                     break
             if next_line:
@@ -195,7 +287,7 @@ def get_graph(index, branch, code, graph, if_tracker):
         return index
 
     # branch to a new instance 
-    elif "{" in code[index]:   
+    elif "{" == code[index].strip():   
 
         # We're in a new branch
         
@@ -221,13 +313,13 @@ def get_graph(index, branch, code, graph, if_tracker):
                 # NOTE: you must make sure that the previous line ins't a '}' delimiter
                 # if it was, then the linkage would've been already done in the 'rel if' stuff 
                 prev_line = graph[-1][0]-1
-                if "}" not in code[prev_line]:
+                if "}" != code[prev_line].strip():
                     graph[-2].append(index-1)
 
-                # ## ADD THE TRUE DIR DELIMITER
-                # # if this is the first line in true branch and not a successor to a normal line
-                # if graph[-2][0]+1 in branch:   
-                #     graph[-2].append(True)
+                ## ADD THE TRUE DIR DELIMITER
+                # if this is the first line in true branch and not a successor to a normal line
+                if graph[-2][0]+1 in branch:   
+                    graph[-2].append("True")
 
 
             # add a new rel if statement
@@ -246,8 +338,8 @@ def get_graph(index, branch, code, graph, if_tracker):
             # link to previous line [IF NOT "}" -end of a nested block that will propably will be linked to this line
             # NOR "{"]
             if index-1 > 0:
-                if "}" not in code[index-2]:
-                    if "{" not in code[index-2]:
+                if "}" != code[index-2].strip():
+                    if "{" != code[index-2].strip():
                         # were under a niormal line 
                         graph.append([index-2, index-1])
                     else:
@@ -258,13 +350,16 @@ def get_graph(index, branch, code, graph, if_tracker):
                         # that means we're under a nested block
                         graph.append([index-3, index-1])
 
+                        # ADD TRUE DIR DELIMITER
+                        graph[-1].append("True")
+
             # add current line to graph so that next line will attach to it
             graph.append([index-1])
 
-            # ## ADD THE TRUE DIR DELIMITER
+            # ## ADD THE TRUE DIR DELIMITER [if while was after a branch]
             # # if this is the first line in true branch and not a successor to a normal line
             # if graph[-2][0]+1 in branch:   
-            #     graph[-2].append(True)
+            #     graph[-2].append("True")
 
 
         branch += [index]
@@ -278,13 +373,13 @@ def get_graph(index, branch, code, graph, if_tracker):
                 # check that the node we'll conenct to is a normal line IN THE SCOPE
                 
                 if index < len(code)-1:
-                    if "{" not in code[index + 1]:
+                    if "{" != code[index + 1].strip():
                         graph[-1].append(index)
                         
-                        # ## ADD THE TRUE DIR DELIMITER
-                        # # if this is the first line in true branch and not a successor to a normal line
-                        # if graph[-1][0]+1 in branch:   
-                        #     graph[-1].append(True)
+                        ## ADD THE TRUE DIR DELIMITER
+                        # if this is the first line in true branch and not a successor to a normal line
+                        if graph[-1][0]+1 in branch:   
+                            graph[-1].append("True")
             
 
             # add
