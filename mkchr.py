@@ -6,13 +6,14 @@ import sys
     # DONE => ture
 # TODO: handle comments in-between rel ifs [& everywhere else rly]
 # TODO: IMPORTANT improve delimiters that could be used anywhere else
-    # DONE => '{' and '}'
+    # DONE
 # TODO: style
     # DONE
 # TODO: escape string fed to graphviz
     # DONE
 # TODO: support a whole working file
 # TODO: line string processing 
+    # DONE
 # TODO: for loop support
     # DONE!
 
@@ -26,6 +27,63 @@ def main(code_file, export_file):
     code = for_to_while(code)
     get_graph(0, [], code, graph, [])
     visualize(graph, code, export_file)
+
+def exist(*objects, line):
+    "Chech the existance of [object] in line. Made to save time, skip comments, quotes and naughty keyword-like variables."
+    
+    # to reduce complications
+    line = line.strip()
+
+    ## detect comments
+    # inline
+    comment = False
+    if '//' == line[:2]:
+        comment = True
+    
+    # the parenthesis problem => [for(...) | for (...)] #notice the space before '('
+    line = line.replace('(', ' (')
+
+    # detect quotes
+    quote = [None, None]
+    if not comment:
+        for i in range(len(line)):
+            # no first quote yet
+            if quote[0] == None:
+                if '"' == line[i] or "'" == line[i]:
+                    quote[0] = i
+                    continue
+            
+            else:
+                # the first matching quote is the last one
+                if line[i] == line[quote[0]]:
+                    quote[1] = i
+                    break
+
+    if quote[0]:                
+        # remove the quotes
+            line = " ".join(line.split(line[quote[0]:quote[1]+1]))
+    
+    # split spaces
+    line = line.split(" ")
+    
+    # now the line is ready
+    # the function is basically a logical anding
+    
+    all_true = True
+    
+    for obj in objects:
+        exists = False
+        # check existance of each one    
+        for word in line:
+            if word == obj:
+                exists = True
+                break
+        # obj doesn't exist in line
+        if not exists:
+            all_true = False
+            break
+    
+    return all_true
 
 def for_to_while(code):
     def convert(line):
@@ -53,7 +111,8 @@ def for_to_while(code):
 
         # search for a for and if you find it, find the last line in its block then do stuff
         for i, l in enumerate(code):
-            if "for" in l and not got_for: 
+            # if "for" in l and not got_for: 
+            if exist("for", line=l) and not got_for: 
                 got_for = True
                 declaration, cond, delta = convert(l)
 
@@ -93,9 +152,11 @@ def visualize(graph, code, export_file):
     for i, l in enumerate(code):
         line = str(i+1) + "# " + l.strip()
         if not (l.strip() == "}" or l.strip() == "{"):
-            if ("if" in l.split() or "else" in l.split()):
+            # if ("if" in l.split() or "else" in l.split()):
+            if (exist("if", line=l) or exist("else", line=l)):
                 dot.attr("node", shape="diamond", color="red")
-            elif "while" in l.split():
+            # elif "while" in l.split():
+            elif exist("while", line=l):
                 dot.attr("node", shape="diamond", color="green")
             else:
                 dot.attr("node", shape="box", color="black")
@@ -154,9 +215,11 @@ def get_graph(index, branch, code, graph, if_tracker):
             in_loop = False
             if index+1 < len(code):
                 # if last line in rel ifs
-                if not ("else" in code[index+1]):
+                # if not ("else" in code[index+1]):
+                if not exist("else", line=code[index+1]):
                     if len(branch) > 1:
-                        if "while" in code[branch[-2]-1]:
+                        # if "while" in code[branch[-2]-1]:
+                        if exist("while", line=code[branch[-2]-1]):
                             in_loop = True
             
             # searching for the line
@@ -178,7 +241,8 @@ def get_graph(index, branch, code, graph, if_tracker):
 
             #### else doesn't have a false dir ####
             is_else = False
-            if "else" in code[neighbouring_branch] and not "if" in code[neighbouring_branch]:
+            # if "else" in code[neighbouring_branch] and not "if" in code[neighbouring_branch]:
+            if exist("else", line=code[neighbouring_branch]) and not exist("if", line=code[neighbouring_branch]):
                 is_else = True
 
             # add the false branch if not else
@@ -213,8 +277,9 @@ def get_graph(index, branch, code, graph, if_tracker):
             if index+1 < len(code):
 
                 ## check if last rel if block
-                next_line = code[index + 1].strip().split()
-                if not ('else' in next_line):
+                next_line = code[index + 1].strip()
+                # if not ('else' in next_line):
+                if not exist('else', line=next_line):
                     # pop from the if_tracker
                     while if_tracker:
 
@@ -232,7 +297,8 @@ def get_graph(index, branch, code, graph, if_tracker):
                             # check for a loop
                             in_loop = False
                             if len(branch) > 1:
-                                if "while" in code[branch[-2]-1]:
+                                # if "while" in code[branch[-2]-1]:
+                                if exist("while", line=code[branch[-2]-1]):
                                     in_loop = True
                             
                             l = None
@@ -262,7 +328,8 @@ def get_graph(index, branch, code, graph, if_tracker):
 
 
         # if we're in a loop
-        elif "while" in code[branch[-1]-1]:
+        # elif "while" in code[branch[-1]-1]:
+        elif exist("while", line=code[branch[-1]-1]):
             ## true direcion
             # find a clear last line
             if "}" != code[index-1].strip():
@@ -301,10 +368,11 @@ def get_graph(index, branch, code, graph, if_tracker):
         ## is that we keep track of related if's then point 'true'
         ## post else' block 
 
-        current_line = code[index-1].strip().split()
+        current_line = code[index-1].strip()
 
         # if
-        if "if" in current_line and not "else" in current_line:            
+        #if "if" in current_line and not "else" in current_line:            
+        if exist("if", line=current_line) and not exist("else", line=current_line):            
             # link the related if's blocks to the graph [the head 'if' to whatever is the prev normal line]
             if len(graph) > 1:
                 # NOTE: since the delimiter is "{" instead of the keyword itself, 
@@ -326,15 +394,18 @@ def get_graph(index, branch, code, graph, if_tracker):
             if_tracker.append([index-1])  
 
         # elif
-        elif "else" in current_line and "if" in current_line :
+        #elif "else" in current_line and "if" in current_line :
+        elif exist("else", "if", line=current_line):
             # add a new rel if statement
             if_tracker.append([index-1])  
         # else
-        elif 'else' in current_line and 'if' not in current_line:
+        #elif 'else' in current_line and 'if' not in current_line:
+        elif exist('else', line=current_line) and not exist('if', line=current_line):
             # add a new rel if statement
             if_tracker.append([index-1])  
 
-        elif "while" in current_line:
+        # elif "while" in current_line:
+        elif exist("while", line=current_line):
             # link to previous line [IF NOT "}" -end of a nested block that will propably will be linked to this line
             # NOR "{"]
             if index-1 > 0:
